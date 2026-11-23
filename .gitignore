@@ -1,0 +1,21 @@
+# 构建产物
+app/build/
+build/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# 签名材料，绝不入库
+*.jks
+*.keystore
+*.p12
+keystore.properties
+
+# 编辑器 / 系统
+.idea/
+*.iml
+.DS_Store
+.gradle/
+local.properties
