@@ -10,6 +10,7 @@ import android.os.Looper;
 import android.util.AttributeSet;
 import android.view.View;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Random;
 
@@ -36,7 +37,8 @@ public class GameView extends View {
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private int direction = DIR_RIGHT;
-    private int pendingDirection = DIR_RIGHT;
+    /** 待生效方向：一次滑动只允许一个方向 */
+    private int pendingDirection = -1;
     private int score = 0;
     private long stepMs = 180;
     private boolean running = false;
@@ -86,7 +88,7 @@ public class GameView extends View {
         snake.add(new int[]{cx - 1, cy});
         snake.add(new int[]{cx - 2, cy});
         direction = DIR_RIGHT;
-        pendingDirection = DIR_RIGHT;
+        pendingDirection = -1;
         score = 0;
         stepMs = 180;
         gameOver = false;
@@ -118,7 +120,9 @@ public class GameView extends View {
         return false;
     }
 
-    /** 由外部（滑动/按键）调用，只记录待生效方向，避免一帧内多次转向。 */
+    /**
+     * 由外部（滑动/按键）调用。一次滑动只允许一个方向，进入 pendingDirection。
+     */
     public void changeDirection(int dx, int dy) {
         if (gameOver) return;
         int nd;
@@ -128,13 +132,15 @@ public class GameView extends View {
         else if (dy == -1) nd = DIR_UP;
         else return;
 
-        // 禁止 180 度反向
+        // 与当前方向比较，禁止 180 度反向和重复同向
+        if (nd == direction) return;
         if ((direction == DIR_UP && nd == DIR_DOWN)
                 || (direction == DIR_DOWN && nd == DIR_UP)
                 || (direction == DIR_LEFT && nd == DIR_RIGHT)
                 || (direction == DIR_RIGHT && nd == DIR_LEFT)) {
             return;
         }
+        // 一次滑动只允许一个方向
         pendingDirection = nd;
     }
 
@@ -163,7 +169,11 @@ public class GameView extends View {
 
     private void step() {
         if (gameOver) return;
-        direction = pendingDirection;
+        // 消费 pendingDirection
+        if (pendingDirection != -1) {
+            direction = pendingDirection;
+            pendingDirection = -1;
+        }
 
         int[] head = snake.get(0);
         int hx = head[0];

@@ -1,12 +1,13 @@
 package com.example.snake;
 
 import android.content.Context;
-import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 /**
- * 独立的滑动手势监听器（不依赖 androidx）。
+ * 主流贪吃蛇滑动监听器：按一下、滑一下、松手，一次滑动只允许一个方向。
+ * 阈值按屏幕密度换算（约 30dp），避免误触。
  */
 public class SwipeListener implements View.OnTouchListener {
 
@@ -15,48 +16,79 @@ public class SwipeListener implements View.OnTouchListener {
         void onTap();
     }
 
-    private final GestureDetector detector;
+    /** 触发一次转向所需的最小位移（dp） */
+    private static final float SWIPE_DP = 30f;
+    /** 判定为点击的最大位移（dp） */
+    private static final float TAP_SLOP_DP = 20f;
 
-    public SwipeListener(Context context, final OnSwipe callback) {
-        detector = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
-            private static final int SWIPE_MIN_DISTANCE = 60;
-            private static final int SWIPE_MIN_VELOCITY = 80;
+    private final OnSwipe callback;
+    private final float density;
+    private final float swipeThreshold;
+    private final float tapSlop;
 
-            @Override
-            public boolean onDown(MotionEvent e) {
-                return true;
-            }
+    private float downX;
+    private float downY;
+    private boolean moved;
 
-            @Override
-            public boolean onSingleTapUp(MotionEvent e) {
-                callback.onTap();
-                return true;
-            }
-
-            @Override
-            public boolean onFling(MotionEvent e1, MotionEvent e2, float vx, float vy) {
-                if (e1 == null || e2 == null) return false;
-                float dx = e2.getX() - e1.getX();
-                float dy = e2.getY() - e1.getY();
-
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    if (Math.abs(dx) > SWIPE_MIN_DISTANCE && Math.abs(vx) > SWIPE_MIN_VELOCITY) {
-                        callback.onSwipe(dx > 0 ? 1 : -1, 0);
-                        return true;
-                    }
-                } else {
-                    if (Math.abs(dy) > SWIPE_MIN_DISTANCE && Math.abs(vy) > SWIPE_MIN_VELOCITY) {
-                        callback.onSwipe(0, dy > 0 ? 1 : -1);
-                        return true;
-                    }
-                }
-                return false;
-            }
-        });
+    public SwipeListener(Context context, OnSwipe callback) {
+        this.callback = callback;
+        this.density = context.getResources().getDisplayMetrics().density;
+        this.swipeThreshold = SWIPE_DP * density;
+        this.tapSlop = Math.max(TAP_SLOP_DP * density,
+                ViewConfiguration.get(context).getScaledTouchSlop());
     }
 
     @Override
     public boolean onTouch(View v, MotionEvent event) {
-        return detector.onTouchEvent(event);
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                downX = event.getX();
+                downY = event.getY();
+                moved = false;
+                return true;
+
+            case MotionEvent.ACTION_MOVE: {
+                float x = event.getX();
+                float y = event.getY();
+                if (Math.abs(x - downX) > tapSlop || Math.abs(y - downY) > tapSlop) {
+                    moved = true;
+                }
+                // 一次滑动只允许一个方向，基于起始点判断
+                float dx = x - downX;
+                float dy = y - downY;
+                if (Math.abs(dx) >= swipeThreshold || Math.abs(dy) >= swipeThreshold) {
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        callback.onSwipe(dx > 0 ? 1 : -1, 0);
+                    } else {
+                        callback.onSwipe(0, dy > 0 ? 1 : -1);
+                    }
+                }
+                return true;
+            }
+
+            case MotionEvent.ACTION_UP: {
+                float x = event.getX();
+                float y = event.getY();
+                // 抬手前若还没触发过转向，再补判一次（慢速短滑也能识别）
+                float dx = x - downX;
+                float dy = y - downY;
+                if (Math.abs(dx) >= swipeThreshold || Math.abs(dy) >= swipeThreshold) {
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        callback.onSwipe(dx > 0 ? 1 : -1, 0);
+                    } else {
+                        callback.onSwipe(0, dy > 0 ? 1 : -1);
+                    }
+                } else if (!moved) {
+                    callback.onTap();
+                }
+                return true;
+            }
+
+            case MotionEvent.ACTION_CANCEL:
+                return true;
+
+            default:
+                return true;
+        }
     }
 }
